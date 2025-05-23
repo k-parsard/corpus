@@ -10,18 +10,10 @@
 #include <dc/video.h>
 
 // rumble flags
-#include <stdio.h>
 #include <stdint.h>
-
 #include <kos/init.h>
-
-// #include <dc/maple.h>
-// #include <dc/maple/controller.h>
 #include <dc/maple/purupuru.h>
 #include <plx/font.h>
-
-// KOS_INIT_FLAGS(INIT_DEFAULT);
-
 
 #define PACK_PIXEL(r, g, b) ( ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3) )
 
@@ -120,7 +112,6 @@ pulse effect, when ORed with the special field. */
   };
 } rumble_fields_t;
 
-
 void print_rumble_fields(uint32_t raw) {
   rumble_fields_t fields = {.raw = raw};
   printf("Rumble Fields:\n");
@@ -167,23 +158,49 @@ static inline void word2hexbytes(uint32_t word, uint8_t *bytes) {
   }
 }
 
-static int field = 0;
+void drawpointer(int x, int y, int xx, int yy, int c) {
+    for(yy = 0; yy < 20; ++yy) {
+        for(xx = 0; xx < 20; ++xx) {
+            vram_s[(((yy + y*2 - 10) - 36) * 640 + (xx + x - 10 - 220))] = c;
+            // printf("%d %d", xx, yy);
+        }
+    }
+}
+
+#define DRAW_POINTER(x, y, xx, yy, c) do { \
+    for(yy = 0; yy < 20; ++yy) { \
+        for(xx = 0; xx < 20; ++xx) { \
+            vram_s[(((yy + y*2 - 10) - 36) * 640 + (xx + x - 10 - 220))] = c; \
+        } \
+    } \
+} while (0)
+
+#define CONTROLS(dev, state, effect, break_flag) do { \
+    if((dev = maple_enum_type(0, MAPLE_FUNC_LIGHTGUN))) { \
+        if((state = (cont_state_t *)maple_dev_status(dev))) { \
+            if((state->buttons & CONT_START)) \
+                break_flag = 1; \
+            \
+            if((state->buttons & CONT_A)) { \
+                purupuru_rumble_raw(purudev, effect); \
+                printf("Rumble: 0x%lx!\n", effect); \
+            } \
+        } \
+    } \
+} while (0)
+
 int main(int argc, char *argv[]) {
+    vid_set_mode(DM_640x480, PM_RGB565);
+
     int x, y, xx, yy = 0;
 
-    uint32_t effect = 0;
-    
     uint8_t n[8];
     word2hexbytes(0x011A7010, n);
+    uint32_t effect = (n[0] << 28) + (n[1] << 24) + (n[2] << 20) + (n[3] << 16) +
+        (n[4] << 12) + (n[5] << 8) + (n[6] << 4) + (n[7] << 0);
 
-    effect = (n[0] << 28) + (n[1] << 24) + (n[2] << 20) + (n[3] << 16) +
-    (n[4] << 12) + (n[5] << 8) + (n[6] << 4) + (n[7] << 0);
-
-
-    maple_device_t *dev;
-    maple_device_t *purudev = NULL;
+    maple_device_t *dev, *purudev = NULL;
     cont_state_t *state;
-    vid_set_mode(DM_640x480, PM_RGB565);
 
     for(y = 0; y < 480; ++y) {
         for(x = 0; x < 640; ++x) {
@@ -192,73 +209,29 @@ int main(int argc, char *argv[]) {
     }
 
     for(;;) {
-        vid_waitvbl();
-        field ^= 1;
-        
+        vid_waitvbl();        
         wait_for_dev_attach(&purudev, MAPLE_FUNC_PURUPURU);
 
-        // for(y = 0; y < 480; ++y) {
-        //     for(x = 0; x < 640; ++x) {
-        //         vram_l[y * 640 + x] = 0xFFFF;
-        //     }
-        // }
-
-        for(yy = 0; yy < 20; ++yy) {
-            // if (yy % 2 != field) {
-                for(xx = 0; xx < 20; ++xx) {
-                    vram_s[(((yy + y*2 - 10) - 36) * 640 + (xx + x - 10 - 220))] = 0xFFFF;
-                }
-            // }
-        }
-
-        // for(yy = 0; yy < 10; ++yy) {
-        //     if (yy % 2 != field) {
-        //         for(xx = 0; xx < 20; ++xx) {
-        //             vram_l[(((yy + y - 10)*2 - 36) * 640 + (xx + x - 10 - 220)) / 2] = 0xFFFF;
-        //         }
-        //     }
-        // }
+        DRAW_POINTER(x, y, xx, yy, 0xFFFF);
 
         maple_gun_enable(0);
         maple_gun_read_pos(&x, &y);
 
-        // xx = 0;
-        // yy = 0;
+        DRAW_POINTER(x, y, xx, yy, PACK_PIXEL(255, 0, 0));
 
-        for(yy = 0; yy < 20; ++yy) {
-            // if (yy % 2 != field) {
-                for(xx = 0; xx < 20; ++xx) {
-                    vram_s[(((yy + y*2 - 10) - 36) * 640 + (xx + x - 10 - 220))] = PACK_PIXEL(255, 0, 0);
-                }
-            // }
-        }
 
-        // for(yy = 0; yy < 20; ++yy) {
-        //     if (yy % 2 == field) {
-        //         for(xx = 0; xx < 20; ++xx) {
-        //             vram_l[((yy + y - 10 - 36) * 640 + (xx + x - 10 - 220)) / 2] = PACK_PIXEL(255, 0, 0);
-        //         }
-        //     }
-        // }
+
+
+
+
+
+
+
+        int break_flag = 0;
+        CONTROLS(dev, state, effect, break_flag);
         
-        // printf("%d %d\n", x, y);
-        if((dev = maple_enum_type(0, MAPLE_FUNC_LIGHTGUN))) {
-            if((state = (cont_state_t *)maple_dev_status(dev))) {
-                if((state->buttons & CONT_START))
-                    break;
-
-                if((state->buttons & CONT_A)) {
-                    // effect = (n[0] << 28) + (n[1] << 24) + (n[2] << 20) + (n[3] << 16) +
-                    //     (n[4] << 12) + (n[5] << 8) + (n[6] << 4) + (n[7] << 0);
-
-                    purupuru_rumble_raw(purudev, effect);
-
-                    /* We print these out to make it easier to track the options chosen */
-                    printf("Rumble: 0x%lx!\n", effect);
-                    // print_rumble_fields(effect);
-                }
-            }
-        }
+        if (break_flag) 
+            break;
     }
 
     return 0;
