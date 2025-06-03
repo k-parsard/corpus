@@ -186,7 +186,7 @@ static inline void word2hexbytes(uint32_t word, uint8_t *bytes) {
     } \
 } while (0)
 
-//  purupuru_rumble_raw(purudev, effect); 
+// purupuru_rumble_raw(purudev, effect); 
 // printf("Rumble: 0x%lx!\n", effect); 
 
 int main(int argc, char *argv[]) {
@@ -212,8 +212,13 @@ int main(int argc, char *argv[]) {
 
     uint8_t n[8];
     // word2hexbytes(0x011A7010, n);
+    // word2hexbytes(0x012A7010, n);
+    // word2hexbytes(0x010A7010, n);
+    // word2hexbytes(0x01077010, n);
+    // word2hexbyes(0x011A3010, n);
+    word2hexbytes(0xFF1A3010, n);
     
-    word2hexbytes(0x00072010, n);
+    // word2hexbytes(0x00072010, n);
 
     for(int l = 0; l < 8; l++) {
         printf("%d", n[l]);
@@ -224,27 +229,37 @@ int main(int argc, char *argv[]) {
     uint32_t effect = (n[0] << 28) + (n[1] << 24) + (n[2] << 20) + (n[3] << 16) +
         (n[4] << 12) + (n[5] << 8) + (n[6] << 4) + (n[7] << 0);
 
+    // uint32_t effect = (60 << 24) | ((PURUPURU_EFFECT2_UINTENSITY(7) | PURUPURU_EFFECT2_LINTENSITY(7)) << 16) | (PURUPURU_EFFECT1_INTENSITY(5) << 8) | PURUPURU_SPECIAL_MOTOR1;
+    // printf("%d", effect);
+
     maple_device_t *dev, *purudev = NULL;
     cont_state_t *state;
 
-    uint8_t eff_effect2 = PURUPURU_EFFECT2_UINTENSITY(0) + PURUPURU_EFFECT2_LINTENSITY(7) + 0 + 0;
-    uint8_t eff_effect1 = PURUPURU_EFFECT1_INTENSITY(7);
-    uint8_t eff_special = PURUPURU_SPECIAL_MOTOR1;
+    // uint8_t eff_effect2 = PURUPURU_EFFECT2_UINTENSITY(0) + PURUPURU_EFFECT2_LINTENSITY(7) + 0 + 0;
+    // uint8_t eff_effect1 = PURUPURU_EFFECT1_INTENSITY(7);
+    // uint8_t eff_special = PURUPURU_SPECIAL_MOTOR1;
 
     // uint8_t eff_effect2 = 255;
     // uint8_t eff_effect1 = 255;
     // uint8_t eff_special = 16;
 
-    printf("%d\n", eff_effect2);
-    printf("%d\n", eff_effect1);
-    printf("%d\n", eff_special);
+    // printf("%d\n", eff_effect2);
+    // printf("%d\n", eff_effect1);
+    // printf("%d\n", eff_special);
 
-    purupuru_effect_t *effect2 = {
-        100,
-        eff_effect2,
-        eff_effect1,
-        eff_special
-    };
+    // purupuru_effect_t *effect2 = {
+    //     100,
+    //     eff_effect2,
+    //     eff_effect1,
+    //     eff_special
+    // };
+
+    // purupuru_effect_t *effect2 = {
+    //     30,
+    //     PURUPURU_EFFECT2_UINTENSITY(5) | PURUPURU_EFFECT2_LINTENSITY(5),
+    //     PURUPURU_EFFECT1_INTENSITY(5),
+    //     PURUPURU_SPECIAL_MOTOR1
+    // };
 
     for(y = 0; y < 480; ++y) {
         for(x = 0; x < 640; ++x) {
@@ -295,29 +310,24 @@ int main(int argc, char *argv[]) {
         average[1] = sums[1] / length;
 
 
-        // printf("\n[");
-        // for (i = 0; i < length; i++) {
-        //     printf("(%d, %d)", points[i][0], points[i][1]);
-        //     if (i == length - 1)
-        //         break;
-            
-        //     printf(", ");
-        // }
-        // printf("]\n\n");
-
-        // printf("Average: (%d, %d)\n\n", average[0], average[1]);
-
-        // printf("Pointer: (%d, %d)\n\n", x, y);
-        // printf("Sums: (%d, %d)\n\n", sums[0], sums[1]);
-        // printf("Average: (%d, %d)\n\n", average[0], average[1]);
-
         DRAW_POINTER(average[0], average[1], xx, yy, PACK_PIXEL(0, 0, 255));
 
-        int break_flag = 0;
-        CONTROLS(dev, state, effect2, break_flag);
+        // int break_flag = 0;
+        // CONTROLS(dev, state, effect, break_flag);
         
-        if (break_flag) 
-            break;
+        // if (break_flag) 
+        //     break;
+
+        if((dev = maple_enum_type(0, MAPLE_FUNC_LIGHTGUN))) { 
+            if((state = (cont_state_t *)maple_dev_status(dev))) { 
+                if((state->buttons & CONT_START)) 
+                    break;
+                
+                if((state->buttons & CONT_A))
+                    purupuru_rumble_raw(purudev, effect); 
+                    // purupuru_rumble(purudev, &effect2); 
+            } 
+        } 
     }
 
     return 0;
