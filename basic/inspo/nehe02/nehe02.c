@@ -207,8 +207,22 @@ int main(int argc, char **argv) {
     uint64 last = 0, now;
 
     uint8_t n[8];
+    word2hexbytes(0xae073010, n);
+
+    //0xae073010
+    //0xa8073010
+    //0xa7073010
+
+    //0x010f6010
+    //...
+    //0x01076010
+
+    //0x01157010
+
+    // word2hexbytes(0x11F0771E, n);
+    // word2hexbytes(0x011A7010, n);
     // word2hexbytes(0x31071011, n);
-    word2hexbytes(0x0237F010, n);
+    // word2hexbytes(0x0237F010, n);
     uint32_t effect = (n[0] << 28) + (n[1] << 24) + (n[2] << 20) + (n[3] << 16) +
         (n[4] << 12) + (n[5] << 8) + (n[6] << 4) + (n[7] << 0);
     
@@ -257,20 +271,24 @@ int main(int argc, char **argv) {
     int dpad_rot[4] = {0, 0, 0, 0};
     int aPress = 0;
     int shooting = 0;
+
+    int trigger_rumble = 0;
+    int rumble_delay_frames = 0;
     
-    // wait_for_dev_attach(&purudev[0], MAPLE_FUNC_PURUPURU, 0);
-    // wait_for_dev_attach(&purudev[1], MAPLE_FUNC_PURUPURU, 1);
+    wait_for_dev_attach(&purudev[0], MAPLE_FUNC_PURUPURU, 0);
+    wait_for_dev_attach(&purudev[1], MAPLE_FUNC_PURUPURU, 1);
 
     while(1) {
+        // maple_gun_disable();
         now = timer_ms_gettime64();
         vid_waitvbl();
 
         for (int i = 0; i < 2; i++) {
-            if (purudev[i] == NULL) {
-                purudev[i] = maple_enum_type(i, MAPLE_FUNC_PURUPURU);
-            }
-            printf("%d\n", purudev[i] != NULL);
-            printf("\n");
+            // if (purudev[i] == NULL) {
+            //     purudev[i] = maple_enum_type(i, MAPLE_FUNC_PURUPURU);
+            // }
+            // printf("%d\n", purudev[i] != NULL);
+            // printf("\n");
         }
 
         cont = maple_enum_dev(0, 0);
@@ -337,10 +355,35 @@ int main(int argc, char **argv) {
             step_pos -= 1 * joyy / 128;
         }
 
-        // light = maple_enum_type(1, MAPLE_FUNC_CONTROLLER);
+        
+        if (aPress) {
+            if (purudev[1] != NULL) {
+                // purupuru_rumble_raw(purudev[1], effect);
+            }
+
+            last = now;
+            shooting = 1;
+        } else {
+            // maple_gun_enable(1);
+        }
+
+        if (last + 1000 < now && shooting) {
+            shooting = 0;
+        }
+
+        if (rumble_delay_frames == 5) {
+            trigger_rumble = 1;
+            maple_gun_enable(1);
+        } else if (rumble_delay_frames > 0) {
+            rumble_delay_frames--;
+        } 
+        
+        if (trigger_rumble) {
+            purupuru_rumble_raw(purudev[1], effect);
+            trigger_rumble = 0;
+        }
+
         light = maple_enum_type(0, MAPLE_FUNC_LIGHTGUN);
-        maple_gun_enable(1);
-    
         if ((state = (cont_state_t *)maple_dev_status(light))) {
             if(state->buttons & CONT_START) {
                 break;
@@ -370,9 +413,17 @@ int main(int argc, char **argv) {
                 dpad_rot[3] = 0;
             }
 
-            if(state->buttons & CONT_A) {
+            // if(state->buttons & CONT_A) {
+            //     aPress = 1;
+            // } else {
+            //     aPress = 0;
+            // }
+
+            if (state->buttons & CONT_A && !aPress) {
                 aPress = 1;
-            } else {
+                // trigger_rumble = 1;
+                rumble_delay_frames = 10;  // Wait 2 frames before rumbling
+            } else if (!(state->buttons & CONT_A)) {
                 aPress = 0;
             }
         }
@@ -381,29 +432,13 @@ int main(int argc, char **argv) {
             yrot -= 60;
         } else if (dpad_rot[1]) {
             yrot += 60;
-        } else if (dpad_rot[2]) {
+        }
+        
+        if (dpad_rot[2]) {
             xrot -= 1.5f;
         } else if (dpad_rot[3]) {
             xrot += 1.5f;
         }
-
-        if (aPress && !shooting) {
-            if (purudev[0] != NULL) {
-                purupuru_rumble_raw(purudev[0], effect);
-            }
-            if (purudev[1] != NULL) {
-                // printf("%d", purudev[1] == NULL);
-                purupuru_rumble_raw(purudev[1], effect);
-            }
-
-            last = now;
-            shooting = 1;
-        }
-
-        if (last + 1000 < now && shooting) {
-            shooting = 0;
-        }
-
 
         pos_y = fabs(sin(step_pos / 75.0f * 2.0f * PI) * sin(step_pos / 75.0f * 2.0f * PI))/4;
         // step_side = fabs(sin(step_pos / 75.0f * 2.0f * PI) * sin(step_pos / 75.0f * 2.0f * PI))*2;
@@ -415,8 +450,7 @@ int main(int argc, char **argv) {
         draw_cube(10.0f, -1.0f, -25.0f, 1.0f, 1.0f, 1.0f);
         draw_cube(2.0f, -1.0f, -35.0f, 3.0f, 2.0f, 1.0f);
 
-        vid_waitvbl();
-        maple_gun_enable(1);
+        // maple_gun_enable(1);
         maple_gun_read_pos(&point_x, &point_y);
 
         int pointer_x = point_x - 220;
