@@ -27,6 +27,11 @@
 #include <GL/glu.h>
 #include <GL/glkos.h>
 
+#include <string.h>
+#include <kos/init.h>
+#include <dc/sound/sound.h>
+#include <dc/sound/sfxmgr.h>
+
 #define PI 3.1415926535897932f
 
 /*
@@ -203,11 +208,19 @@ void draw_cube(float x, float y, float z, float width, float height, float depth
 int main(int argc, char **argv) {
     maple_device_t *cont, *light, *purudev[2] = {NULL, NULL};
     cont_state_t *state;
-
     uint64 last = 0, now;
 
+    snd_init();
+    sfxhnd_t beep4 = snd_sfx_load("/rd/beep-4.wav");
+
+    uint8_t sr[8];
+    word2hexbytes(0x00000000, sr);
+
+    uint32_t stop = (sr[0] << 28) + (sr[1] << 24) + (sr[2] << 20) + (sr[3] << 16) +
+        (sr[4] << 12) + (sr[5] << 8) + (sr[6] << 4) + (sr[7] << 0);
+
     uint8_t n[8];
-    word2hexbytes(0xae073010, n);
+    word2hexbytes(0x01157010, n);
 
     //0xae073010
     //0xa8073010
@@ -278,6 +291,7 @@ int main(int argc, char **argv) {
     wait_for_dev_attach(&purudev[0], MAPLE_FUNC_PURUPURU, 0);
     wait_for_dev_attach(&purudev[1], MAPLE_FUNC_PURUPURU, 1);
 
+
     while(1) {
         // maple_gun_disable();
         now = timer_ms_gettime64();
@@ -292,7 +306,6 @@ int main(int argc, char **argv) {
         }
 
         cont = maple_enum_dev(0, 0);
-        // cont = maple_enum_type(0, MAPLE_FUNC_CONTROLLER);
         if ((state = (cont_state_t *)maple_dev_status(cont))) {
             if(state->buttons & CONT_START)
                 break;
@@ -354,24 +367,26 @@ int main(int argc, char **argv) {
             pos_x -= -0.25f * sprint * joyy / 128 * sin(xrot * PI / 180);
             step_pos -= 1 * joyy / 128;
         }
-
         
         if (aPress) {
-            if (purudev[1] != NULL) {
-                // purupuru_rumble_raw(purudev[1], effect);
-            }
-
             last = now;
             shooting = 1;
-        } else {
-            // maple_gun_enable(1);
         }
 
         if (last + 1000 < now && shooting) {
             shooting = 0;
         }
 
-        if (rumble_delay_frames == 5) {
+        // if (rumble_delay_frames == 9) {
+        //     rumble_delay_frames--;
+        //     trigger_rumble = 1;
+        //     maple_gun_enable(1);
+        // } else if (rumble_delay_frames > 0) {
+        //     rumble_delay_frames--;
+        //     maple_gun_enable(1);
+        // }
+
+        if (rumble_delay_frames == 9) {
             trigger_rumble = 1;
             maple_gun_enable(1);
         } else if (rumble_delay_frames > 0) {
@@ -421,7 +436,7 @@ int main(int argc, char **argv) {
 
             if (state->buttons & CONT_A && !aPress) {
                 aPress = 1;
-                // trigger_rumble = 1;
+                snd_sfx_play_chn(0, beep4, 128, 128);
                 rumble_delay_frames = 10;  // Wait 2 frames before rumbling
             } else if (!(state->buttons & CONT_A)) {
                 aPress = 0;
@@ -525,6 +540,9 @@ int main(int argc, char **argv) {
         /* Finish the frame - Notice there is no glKosBegin/FinshFrame */
         glKosSwapBuffers();
     }
+
+    snd_sfx_unload_all();	
+    snd_shutdown();
 
     return 0;
 }

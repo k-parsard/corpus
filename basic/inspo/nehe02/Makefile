@@ -5,14 +5,16 @@
 #   
 
 TARGET = nehe02.elf
-OBJS = nehe02.o
+OBJS = nehe02.o romdisk.o 
+KOS_ROMDISK_DIR = romdisk
 
-all: rm-elf $(TARGET)
+all: clean $(TARGET)
 
 include $(KOS_BASE)/Makefile.rules
 
 clean: rm-elf
-	-rm -f $(OBJS)
+	-rm -f $(TARGET) $(OBJS)
+	-rm -f romdisk.o romdisk.img
 
 rm-elf:
 	-rm -f $(TARGET)
@@ -24,6 +26,6 @@ run: $(TARGET)
 	$(KOS_LOADER) $(TARGET)
 
 dist: $(TARGET)
-	-rm -f $(OBJS)
+	-rm -f $(OBJS) romdisk.o romdisk.img
 	$(KOS_STRIP) $(TARGET)
 
