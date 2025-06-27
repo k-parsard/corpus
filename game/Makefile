@@ -4,8 +4,8 @@
 # (c)2001 Benoit Miller
 #   
 
-TARGET = nehe02.elf
-OBJS = nehe02.o romdisk.o
+TARGET = game.elf
+OBJS = game.o romdisk.o
 KOS_ROMDISK_DIR = romdisk
 
 all: clean $(TARGET)

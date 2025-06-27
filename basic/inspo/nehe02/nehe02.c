@@ -32,15 +32,12 @@
 #include <dc/sound/sound.h>
 #include <dc/sound/sfxmgr.h>
 
+#include "anim_loader.h"
+#include "bone_hierarchy.h"
+
 #define PI 3.1415926535897932f
 #define LENGTH 10
 
-/*
-   The simplest OpenGL example ever!
-
-   Essentially the same thing as NeHe's lesson02 code.
-   To learn more, go to http://nehe.gamedev.net/.
-*/
 
 static inline void word2hexbytes(uint32_t word, uint8_t *bytes) {
   for (int i = 0; i < 8; i++) {
@@ -62,7 +59,7 @@ void wait_for_dev_attach(maple_device_t **dev_ptr, unsigned int func, int port) 
     }
 }
 
-void draw_gl(float xrot, float yrot, float pos_x, float pos_y, float pos_z) {
+void draw_room(float xrot, float yrot, float pos_x, float pos_y, float pos_z, float base, float width, float depth, float height) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     
     glLoadIdentity();
@@ -75,60 +72,60 @@ void draw_gl(float xrot, float yrot, float pos_x, float pos_y, float pos_z) {
     glBegin(GL_QUADS);
     glColor3f(1.0f, 1.0f, 1.0f);
 
-    glVertex3f(-25.0f, -1.0f, -50.0f);
-    glVertex3f(25.0f, -1.0f, -50.0f);
-    glVertex3f(25.0f, -1.0f, 0.0f);
-    glVertex3f(-25.0f, -1.0f, 0.0f);
+    glVertex3f(-width, base, -depth);
+    glVertex3f(width, base, -depth);
+    glVertex3f(width, base, 0.0f);
+    glVertex3f(-width, base, 0.0f);
     glEnd();
 
     //far wall
     glBegin(GL_QUADS);
     glColor3f(0.65882352941f, 1.0f, 1.0f);
 
-    glVertex3f(-25.0f, -1.0f, -50.0f);
-    glVertex3f(25.0f, -1.0f, -50.0f);
-    glVertex3f(25.0f, 3.0f, -50.0f);
-    glVertex3f(-25.0f, 3.0f, -50.0f);
+    glVertex3f(-width, base, -depth);
+    glVertex3f(width, base, -depth);
+    glVertex3f(width, base + height, -depth);
+    glVertex3f(-width, base + height, -depth);
     glEnd();
 
     //ceiling
     glBegin(GL_QUADS);
     glColor3f(0.82745098039f, 0.82745098039f, 0.82745098039f);
 
-    glVertex3f(-25.0f, 3.0f, -50.0f);
-    glVertex3f(25.0f, 3.0f, -50.0f);
-    glVertex3f(25.0f, 3.0f, 0.0f);
-    glVertex3f(-25.0f, 3.0f, 0.0f);
+    glVertex3f(-width, base + height, -depth);
+    glVertex3f(width, base + height, -depth);
+    glVertex3f(width, base + height, 0.0f);
+    glVertex3f(-width, base + height, 0.0f);
     glEnd();
 
     //left wall
     glBegin(GL_QUADS);
     glColor3f(0.88235294117f, 1.0f, 0.88235294117f);
 
-    glVertex3f(-25.0f, -1.0f, 0.0f);
-    glVertex3f(-25.0f, -1.0f, -50.0f);
-    glVertex3f(-25.0f, 3.0f, -50.0f);
-    glVertex3f(-25.0f, 3.0f, 0.0f);
+    glVertex3f(-width, base, 0.0f);
+    glVertex3f(-width, base, -depth);
+    glVertex3f(-width, base + height, -depth);
+    glVertex3f(-width, base + height, 0.0f);
     glEnd();
 
     //right wall
     glBegin(GL_QUADS);
     glColor3f(0.88235294117f, 1.0f, 0.88235294117f);
 
-    glVertex3f(25.0f, -1.0f, 0.0f);
-    glVertex3f(25.0f, -1.0f, -50.0f);
-    glVertex3f(25.0f, 3.0f, -50.0f);
-    glVertex3f(25.0f, 3.0f, 0.0f);
+    glVertex3f(width, base, 0.0f);
+    glVertex3f(width, base, -depth);
+    glVertex3f(width, base + height, -depth);
+    glVertex3f(width, base + height, 0.0f);
     glEnd();
 
     //near wall    
     glBegin(GL_QUADS);
     glColor3f(0.65882352941f, 1.0f, 1.0f);
 
-    glVertex3f(-25.0f, -1.0f, 0.0f);
-    glVertex3f(-25.0f, 3.0f, 0.0f);
-    glVertex3f(25.0f, 3.0f, 0.0f);
-    glVertex3f(25.0f, -1.0f, 0.0f);
+    glVertex3f(-width, base, 0.0f);
+    glVertex3f(-width, base + height, 0.0f);
+    glVertex3f(width, base + height, 0.0f);
+    glVertex3f(width, base, 0.0f);
 
     glEnd();
 }
@@ -284,6 +281,11 @@ struct Camera {
     float sprint;
 };
 
+struct Room {
+    float base;
+    float width, depth, height;
+};
+
 static inline void std_controller_inputs(maple_device_t *cont, struct Camera *camera, int *brake) {
     cont_state_t *state;
 
@@ -432,12 +434,44 @@ static inline void step(struct Camera *camera) {
     camera->pos_y = fabs(sin(camera->step / 75.0f * 2.0f * PI) * sin(camera->step / 75.0f * 2.0f * PI))/4;
 }
 
+static inline void multiply_matrices(float *out, const float *a, const float *b) {
+    for (int row = 0; row < 4; row++) {
+        for (int col = 0; col < 4; col++) {
+            out[col * 4 + row] = 
+                a[0 * 4 + row] * b[col * 4 + 0] +
+                a[1 * 4 + row] * b[col * 4 + 1] +
+                a[2 * 4 + row] * b[col * 4 + 2] +
+                a[3 * 4 + row] * b[col * 4 + 3];
+        }
+    }
+}
+
 int main(int argc, char **argv) {
     maple_device_t *cont, *light, *purudev[2] = {NULL, NULL};
     cont_state_t *state;
     uint64 last = 0, now;
 
     int brake = 0;
+
+    float scale = 1.0f;
+
+       
+    Animation *walk_anim = load_animation("/rd/animation.animbin");
+    int b = 0;
+
+    if (walk_anim) {
+        printf("Loaded animation: %d bones, %d frames, %.1f fps\n",
+               walk_anim->num_bones, walk_anim->num_frames, walk_anim->frame_rate);
+    }
+
+    if (!walk_anim) {
+        printf("Failed to load animation file!\n");
+        fflush(stdout);
+    }
+
+    float current_time = 0.0f;     // Time in seconds
+    float current_frame = 0.0f;    // Interpolated frame index (e.g., 12.5)
+    
 
     snd_init();
     sfxhnd_t pistol_fire = snd_sfx_load("/rd/pistol-fire.wav");
@@ -448,6 +482,7 @@ int main(int argc, char **argv) {
         (n[4] << 12) + (n[5] << 8) + (n[6] << 4) + (n[7] << 0);
     
     glStart();
+    struct Room room = {.base = -3.0f, .width = 25.0f, .depth = 100.0f, .height = 6.0f};
 
     struct Camera camera = {0};
     camera.sprint = 1.0f;
@@ -470,15 +505,21 @@ int main(int argc, char **argv) {
     wait_for_dev_attach(&purudev[0], MAPLE_FUNC_PURUPURU, 0);
     wait_for_dev_attach(&purudev[1], MAPLE_FUNC_PURUPURU, 1);
 
+    camera.pos_x = -10.0f;
+    camera.pos_y = -10.0f;
+    camera.pos_z = -25.0f;
+
+    camera.xrot = 0.0f;
+    camera.yrot = 0.0f;
+
     while(1) {
         now = timer_ms_gettime64();
         vid_waitvbl();
-        
+
         cont = maple_enum_dev(0, 0);
         std_controller_inputs(cont, &camera, &brake);
         
         shoot(&trigger_rumble, &rumble_delay_frames, effect, purudev[1], &recoil);
-
         light = maple_enum_type(0, MAPLE_FUNC_LIGHTGUN);
         lightgun_inputs(light, &camera, dpad_rot, &aPress, &rumble_delay_frames, pistol_fire, &brake, &recoil);
         
@@ -489,10 +530,125 @@ int main(int argc, char **argv) {
         step(&camera);
 
         /* Draw the "scene" */
-        draw_gl(camera.xrot, camera.yrot, camera.pos_x, camera.pos_y, camera.pos_z);
-        draw_cube(-20.0f, -1.0f, -19.0f, 1.0f, 1.0f, 1.0f);
-        draw_cube(10.0f, -1.0f, -25.0f, 1.0f, 1.0f, 1.0f);
-        draw_cube(2.0f, -1.0f, -35.0f, 3.0f, 2.0f, 1.0f);
+        draw_room(camera.xrot, camera.yrot, camera.pos_x, camera.pos_y, camera.pos_z, room.base, room.width, room.depth, room.height);
+        draw_cube(-20.0f, room.base, -19.0f, 1.0f, 1.0f, 1.0f);
+        draw_cube(10.0f, room.base, -25.0f, 1.0f, 1.0f, 1.0f);
+        draw_cube(2.0f, room.base, -35.0f, 3.0f, 2.0f, 1.0f);
+
+        // glDisable(GL_DEPTH_TEST);
+        // glLineWidth(3.0f);
+        // glColor3f(1.0f, 0.0f, 1.0f);  // bright magenta
+
+        // glBegin(GL_LINES);
+        // glVertex3f(0.0f, 0.0f, -5.0f);  // From origin
+        // glVertex3f(0.0f, 1.0f, -5.0f);  // Up 1 unit
+        // glEnd();
+
+        //
+
+        float delta_time = 1.0f / 60.0f;  // or use actual timing
+        current_time += delta_time;
+
+        // Advance frame using animation frame rate
+        current_frame = current_time * walk_anim->frame_rate;
+
+        // Loop the animation
+        if (current_frame >= walk_anim->num_frames)
+            current_frame = fmodf(current_frame, (float)walk_anim->num_frames);
+
+        int frame_i = (int)current_frame;
+
+        BoneMatrix *local = &walk_anim->frames[frame_i * walk_anim->num_bones];
+        BoneMatrix world[NUM_BONES];
+
+        for (int i = 0; i < NUM_BONES; i++) {
+            int parent = bone_parent[i];
+
+            if (parent == -1) {
+                world[i] = local[i];  // Copy local transform to world for root
+            } else if (parent >= 0 && parent < NUM_BONES) {
+                multiply_matrices(world[i].matrix, world[parent].matrix, local[i].matrix);
+                for (int i = 0; i < 5; i++) {
+                    int p = bone_parent[i];
+
+                    printf(
+                        "Bone %d | Parent: %d\n"
+                        "  Local Pos: %.2f %.2f %.2f\n"
+                        "  World Pos: %.2f %.2f %.2f\n\n",
+                        i, p,
+                        local[i].matrix[12], local[i].matrix[13], local[i].matrix[14],
+                        world[i].matrix[12], world[i].matrix[13], world[i].matrix[14]
+                    );
+                }
+            } else {
+                printf("⚠️ Invalid parent index: %d for bone %d\n", parent, i);
+            }
+        }
+        // glDisable(GL_DEPTH_TEST);
+        // glColor3f(1.0f, 0.8f, 0.1f);  // bright yellow
+
+        // glBegin(GL_LINES);
+        // for (int i = 0; i < NUM_BONES; i++) {
+        //     int p = bone_parent[i];
+        //     if (p == -1) continue;  // skip root
+
+        //     float *child_matrix = world[i].matrix;
+        //     float *parent_matrix = world[p].matrix;
+
+        //     // Translation = last column of column-major 4x4
+        //     float cx = child_matrix[12];
+        //     float cy = child_matrix[13];
+        //     float cz = child_matrix[14];
+
+        //     float px = parent_matrix[12];
+        //     float py = parent_matrix[13];
+        //     float pz = parent_matrix[14];
+
+        //     glVertex3f(px * scale, py * scale, pz * scale);
+        //     glVertex3f(cx * scale, cy * scale, cz * scale);
+        // }
+        // glEnd();
+        
+
+        // glEnable(GL_LINE_SMOOTH);
+        // glLineWidth(2.0f);  // Thicker debug lines
+
+        // float g = world[1].matrix[12];
+        // float h = world[1].matrix[13];
+        // float i = world[1].matrix[14];
+
+        // printf("HIP: %.2f %.2f %.2f\n", g, h, i);
+        // fflush(stdout);
+
+        // glDisable(GL_DEPTH_TEST); 
+
+        // glColor3f(1.0f, 0.0f, 0.0f);
+        // glPointSize(8.0f);
+        // glBegin(GL_POINTS);
+        // glVertex3f(g * scale, h * scale, i * scale);
+        // glEnd();
+
+///
+
+        // glBegin(GL_LINES);
+        // glColor3f(0.0f, 1.0f, 0.0f);
+        // glVertex3f(g * scale, h * scale, i * scale);
+        // glVertex3f(g * scale, h * scale + 1.0f, i * scale); // vertical line
+        // glEnd();
+
+        // int parent = 1;
+        // int child = 2;  // Or another bone known to be offset
+
+        // float *pm = world[parent].matrix;
+        // float *cm = world[child].matrix;
+
+        // glBegin(GL_LINES);
+        // glColor3f(1.0f, 1.0f, 0.0f);
+        // glVertex3f(pm[12] * scale, pm[13] * scale, pm[14] * scale);
+        // glVertex3f(cm[12] * scale, cm[13] * scale, cm[14] * scale);
+        // glEnd();
+
+        // draw_cube(g, h, i, 1.0f, 1.0f, 1.0f);
 
         maple_gun_read_pos(&lightgun_x, &lightgun_y);
         crosshair_pos_update(crosshair_pos, average, lightgun_x, lightgun_y, recoil);
@@ -505,7 +661,6 @@ int main(int argc, char **argv) {
 
     snd_sfx_unload_all();	
     snd_shutdown();
-
     return 0;
 }
 
